@@ -1,0 +1,157 @@
+#%%
+import torch
+import torchvision
+import torchvision.transforms as transforms
+from torchvision.transforms import ToPILImage
+import os
+
+save_path = './HW1/results'
+os.makedirs(save_path, exist_ok=True)
+
+show = ToPILImage()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+
+#%%
+# 设定对图片的归一化处理方式，并且下载数据集
+transform = transforms.Compose(
+    [transforms.ToTensor(),
+     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+     ])
+
+batch_size = 4
+
+trainset = torchvision.datasets.CIFAR10(root='./dataset', train=True,
+                                        download=True, transform=transform)
+trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
+                                          shuffle=True, num_workers=0, pin_memory=True)
+
+testset = torchvision.datasets.CIFAR10(root='./dataset', train=False,
+                                       download=True, transform=transform)
+testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+                                         shuffle=False, num_workers=0, pin_memory=True)
+
+classes = ('plane', 'car', 'bird', 'cat',
+           'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+
+#%%
+import torch.nn as nn
+import torch.nn.functional as F
+
+class Net(nn.Module):
+    def __init__(self):
+        # nn.Module子类的函数必须在构造函数中执行父类的构造函数
+        super(Net, self).__init__()
+
+        # 卷积层 '3'表示输入图片为单通道, '6'表示输出通道数，'5'表示卷积核为5*5
+        self.conv1 = nn.Conv2d(3, 6, 5)
+        # 卷积层
+        self.conv2 = nn.Conv2d(6, 16, 5)
+        # 仿射层/全连接层，y = Wx + b
+        self.fc1   = nn.Linear(16*5*5, 120)
+        self.fc2   = nn.Linear(120, 84)
+        self.fc3   = nn.Linear(84, 10)
+
+    def forward(self, x):
+        # 卷积 -> 激活 -> 池化 (relu激活函数不改变输入的形状)
+        # [batch size, 3, 32, 32] -- conv1 --> [batch size, 6, 28, 28] -- maxpool --> [batch size, 6, 14, 14]
+        x = F.max_pool2d(F.relu(self.conv1(x)), (2, 2))
+        # [batch size, 6, 14, 14] -- conv2 --> [batch size, 16, 10, 10] --> maxpool --> [batch size, 16, 5, 5]
+        x = F.max_pool2d(F.relu(self.conv2(x)), 2)
+        # 把 16 * 5 * 5 的特征图展平，变为 [batch size, 16 * 5 * 5]，以送入全连接层
+        x = x.view(x.size()[0], -1)
+        # [batch size, 16 * 5 * 5] -- fc1 --> [batch size, 120]
+        x = F.relu(self.fc1(x))
+        # [batch size, 120] -- fc2 --> [batch size, 84]
+        x = F.relu(self.fc2(x))
+        # [batch size, 84] -- fc3 --> [batch size, 10]
+        x = self.fc3(x)
+        return x
+
+net = Net()
+net.to(device)
+
+#%%
+from torch import optim
+criterion = nn.CrossEntropyLoss() .to(device)# 交叉熵损失函数
+optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9) # 使用SGD（随机梯度下降）优化
+num_epochs = 20 # 训练 20 个 epoch
+
+# %%
+def train(train_loader, model, num_of_epochs, Criterion, Optimizer, path_to_save, draw_loss=None):
+    if draw_loss is None:
+        draw_loss = []
+    for epoch in range(num_of_epochs):
+        running_loss = 0.0
+        for i, data in enumerate(train_loader, 0):
+            inputs, labels = data
+            inputs = inputs.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
+
+            Optimizer.zero_grad()
+            outputs = model(inputs)
+            loss_func = Criterion(outputs, labels)
+            loss_func.backward()
+            Optimizer.step()
+
+            running_loss += loss_func.item()
+            if i % 2000 == 1999:
+                avg = running_loss / 2000
+                print('epoch %d: batch %5d loss: %.3f' % (epoch + 1, i + 1, avg))
+                draw_loss.append(avg)
+                running_loss = 0.0
+
+        torch.save(model.state_dict(), f"{path_to_save}/epoch_{epoch + 1}_model.pth")
+
+    print('Finished Training')
+    return draw_loss
+
+#%%
+loss = train(trainloader, net, num_epochs, criterion, optimizer, save_path)
+
+# %%
+def predict(test_loader, model):
+    model.to(device)
+    correct = 0
+    total = 0
+
+    with torch.no_grad():
+        for data in test_loader:
+            images, labels = data
+            images = images.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
+
+            outputs = net(images)
+            _, predicted = torch.max(outputs, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+
+    acc = 100.0 * correct / total if total > 0 else 0.0
+    print('测试集中的准确率为: %.2f %%' % acc)
+    return acc
+
+accuracy = predict(testloader, net)
+
+#%%
+import matplotlib.pyplot as plt
+
+def draw(values, plot_dir='./HW1/results/plots', filename=None, dpi=150):
+    """
+    将折线图保存到指定文件夹。默认目录为 `./results/plots`。
+    """
+    os.makedirs(plot_dir, exist_ok=True)
+    if filename is None:
+        filename = f"loss_batchsize{batch_size}_epochs{num_epochs}_acc{accuracy}.png"
+    path = os.path.join(plot_dir, filename)
+
+    plt.figure()
+    plt.plot(values)
+    plt.xlabel('step')
+    plt.ylabel('loss')
+    plt.title('Training Loss')
+    plt.grid(True)
+    plt.savefig(path, dpi=dpi, bbox_inches='tight')
+    plt.close()
+    print(f"Saved plot to `{path}`")
+
+draw(loss)
