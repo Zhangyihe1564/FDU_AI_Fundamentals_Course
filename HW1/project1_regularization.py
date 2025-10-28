@@ -1,40 +1,9 @@
-#%%
 import torch
-import torchvision
-import torchvision.transforms as transforms
-from torchvision.transforms import ToPILImage
 import os
-from HW1.train_and_predict import train, predict
+from HW1.train import train, device, trainloader, testloader, batch_size
 
 save_path = './HW1/results_regularization'
 os.makedirs(save_path, exist_ok=True)
-
-show = ToPILImage()
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
-
-#%%
-# 设定对图片的归一化处理方式，并且下载数据集
-transform = transforms.Compose(
-    [transforms.ToTensor(),
-     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-     ])
-
-batch_size = 4
-
-trainset = torchvision.datasets.CIFAR10(root='./dataset', train=True,
-                                        download=True, transform=transform)
-trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
-                                          shuffle=True, num_workers=0, pin_memory=True)
-
-testset = torchvision.datasets.CIFAR10(root='./dataset', train=False,
-                                       download=True, transform=transform)
-testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
-                                         shuffle=False, num_workers=0, pin_memory=True)
-
-classes = ('plane', 'car', 'bird', 'cat',
-           'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
-
 #%%
 import torch.nn as nn
 import torch.nn.functional as F
@@ -84,6 +53,26 @@ param_groups = [
 ]
 optimizer = optim.SGD(param_groups, lr=0.001, momentum=0.9)  # 使用L2正则化的随机梯度下降优化器
 num_epochs = int(input("How many epoch do you want to train: "))  # 训练 x 个 epoch
+
+def predict(test_loader, model):
+    model.to(device)
+    correct = 0
+    total = 0
+
+    with torch.no_grad():
+        for data in test_loader:
+            images, labels = data
+            images = images.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
+
+            outputs = dropout_net(images)
+            _, predicted = torch.max(outputs, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+
+    acc = 100.0 * correct / total if total > 0 else 0.0
+    print('测试集中的准确率为: %.2f %%' % acc)
+    return acc
 
 #%%
 loss, steps = train(trainloader, dropout_net,
