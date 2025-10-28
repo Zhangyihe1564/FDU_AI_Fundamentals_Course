@@ -1,15 +1,12 @@
-import torch
 import os
-from HW1.train import train, device, trainloader, testloader, batch_size
+from HW1.train import train, device, trainloader, testloader, batch_size, predict
 
 save_path = './HW1/results_regularization'
 os.makedirs(save_path, exist_ok=True)
-#%%
+
 import torch.nn as nn
 import torch.nn.functional as F
 
-
-# python
 class Dropout_Net(nn.Module):
     def __init__(self):
         super(Dropout_Net, self).__init__()
@@ -30,16 +27,15 @@ class Dropout_Net(nn.Module):
         x = self.fc3(x)
         return x
 
-dropout_net = Dropout_Net()
-dropout_net.to(device)
+model = Dropout_Net()
+model.to(device)
 
-#%%
 from torch import optim
 
 criterion = nn.CrossEntropyLoss().to(device)  # 交叉熵损失函数
 decay_params = []
 no_decay_params = []
-for name, param in dropout_net.named_parameters():
+for name, param in model.named_parameters():
     if not param.requires_grad:
         continue
     if name.endswith(".bias") or "bn" in name.lower() or "batchnorm" in name.lower():
@@ -54,32 +50,10 @@ param_groups = [
 optimizer = optim.SGD(param_groups, lr=0.001, momentum=0.9)  # 使用L2正则化的随机梯度下降优化器
 num_epochs = int(input("How many epoch do you want to train: "))  # 训练 x 个 epoch
 
-def predict(test_loader, model):
-    model.to(device)
-    correct = 0
-    total = 0
-
-    with torch.no_grad():
-        for data in test_loader:
-            images, labels = data
-            images = images.to(device, non_blocking=True)
-            labels = labels.to(device, non_blocking=True)
-
-            outputs = dropout_net(images)
-            _, predicted = torch.max(outputs, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-
-    acc = 100.0 * correct / total if total > 0 else 0.0
-    print('测试集中的准确率为: %.2f %%' % acc)
-    return acc
-
-#%%
-loss, steps = train(trainloader, dropout_net,
+loss, steps = train(trainloader, model,
                     num_epochs, criterion, optimizer, save_path)
-#%%
-accuracy = predict(testloader, dropout_net)
-#%%
+accuracy = predict(testloader, model)
+
 import matplotlib.pyplot as plt
 
 

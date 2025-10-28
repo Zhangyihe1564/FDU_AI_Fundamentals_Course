@@ -1,10 +1,9 @@
-import torch
 import os
-from HW1.train import train, device, trainloader, testloader, batch_size
+from HW1.train import train, device, trainloader, testloader, batch_size, predict
 
 save_path = './HW1/results'
 os.makedirs(save_path, exist_ok=True)
-#%%
+
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -38,39 +37,17 @@ class Net(nn.Module):
         x = self.fc3(x)
         return x
 
-net = Net()
-net.to(device)
+model = Net()
+model.to(device)
 
-#%%
 from torch import optim
 criterion = nn.CrossEntropyLoss() .to(device)# 交叉熵损失函数
-optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9) # 使用SGD（随机梯度下降）优化
+optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9) # 使用SGD（随机梯度下降）优化
 num_epochs = int(input("How many epoch do you want to train: "))  # 训练 x 个 epoch
 
-def predict(test_loader, model):
-    model.to(device)
-    correct = 0
-    total = 0
+loss = train(trainloader, model, num_epochs, criterion, optimizer, save_path)
+accuracy = predict(testloader, model)
 
-    with torch.no_grad():
-        for data in test_loader:
-            images, labels = data
-            images = images.to(device, non_blocking=True)
-            labels = labels.to(device, non_blocking=True)
-
-            outputs = net(images)
-            _, predicted = torch.max(outputs, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-
-    acc = 100.0 * correct / total if total > 0 else 0.0
-    print('测试集中的准确率为: %.2f %%' % acc)
-    return acc
-
-#%%
-loss = train(trainloader, net, num_epochs, criterion, optimizer, save_path)
-accuracy = predict(testloader, net)
-#%%
 import matplotlib.pyplot as plt
 
 def draw(values, plot_dir='./HW1/results/plots', filename=None, dpi=150):

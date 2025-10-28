@@ -62,3 +62,23 @@ def train(train_loader, model, num_of_epochs, Criterion, Optimizer,
 
     print('Finished Training')
     return draw_loss, draw_steps
+
+def predict(test_loader, model):
+    model.to(device)
+    correct = 0
+    total = 0
+
+    with torch.no_grad():
+        for data in test_loader:
+            images, labels = data
+            images = images.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
+
+            outputs = model(images)
+            _, predicted = torch.max(outputs, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+
+    acc = 100.0 * correct / total if total > 0 else 0.0
+    print('测试集中的准确率为: %.2f %%' % acc)
+    return acc
