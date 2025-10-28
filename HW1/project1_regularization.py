@@ -4,6 +4,7 @@ import torchvision
 import torchvision.transforms as transforms
 from torchvision.transforms import ToPILImage
 import os
+from HW1.train_and_predict import train, predict
 
 save_path = './HW1/results_regularization'
 os.makedirs(save_path, exist_ok=True)
@@ -84,68 +85,18 @@ param_groups = [
 optimizer = optim.SGD(param_groups, lr=0.001, momentum=0.9)  # 使用L2正则化的随机梯度下降优化器
 num_epochs = int(input("How many epoch do you want to train: "))  # 训练 x 个 epoch
 
-
-# %%
-def train(train_loader, model, num_of_epochs, Criterion, Optimizer, path_to_save, draw_loss=None):
-    if draw_loss is None:
-        draw_loss = []
-    for epoch in range(num_of_epochs):
-        running_loss = 0.0
-        for i, data in enumerate(train_loader, 0):
-            inputs, labels = data
-            inputs = inputs.to(device, non_blocking=True)
-            labels = labels.to(device, non_blocking=True)
-
-            Optimizer.zero_grad()
-            outputs = model(inputs)
-            loss_func = Criterion(outputs, labels)
-            loss_func.backward()
-            Optimizer.step()
-
-            running_loss += loss_func.item()
-            if i % 2000 == 1999:
-                avg = running_loss / 2000
-                print('epoch %d: batch %5d loss: %.3f' % (epoch + 1, i + 1, avg))
-                draw_loss.append(avg)
-                running_loss = 0.0
-
-        torch.save(model.state_dict(), f"{path_to_save}/epoch_{epoch + 1}_model.pth")
-
-    print('Finished Training')
-    return draw_loss
-
-# %%
-def predict(test_loader, model):
-    model.to(device)
-    correct = 0
-    total = 0
-
-    with torch.no_grad():
-        for data in test_loader:
-            images, labels = data
-            images = images.to(device, non_blocking=True)
-            labels = labels.to(device, non_blocking=True)
-
-            outputs = dropout_net(images)
-            _, predicted = torch.max(outputs, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-
-    acc = 100.0 * correct / total if total > 0 else 0.0
-    print('测试集中的准确率为: %.2f %%' % acc)
-    return acc
-
 #%%
-loss = train(trainloader, dropout_net, num_epochs, criterion, optimizer, save_path)
+loss, steps = train(trainloader, dropout_net,
+                    num_epochs, criterion, optimizer, save_path)
 #%%
 accuracy = predict(testloader, dropout_net)
 #%%
 import matplotlib.pyplot as plt
 
 
-def draw(values, plot_dir='./HW1/results_regularization/plots', filename=None, dpi=150):
+def draw(values, x_values=None, plot_dir='./HW1/results_regularization/plots', filename=None, dpi=150):
     """
-    将折线图保存到指定文件夹。默认目录为 `./results/plots`。
+    如果提供 x_values，则横轴使用这些全局 step（batch 编号），否则使用索引。
     """
     os.makedirs(plot_dir, exist_ok=True)
     if filename is None:
@@ -153,14 +104,19 @@ def draw(values, plot_dir='./HW1/results_regularization/plots', filename=None, d
     path = os.path.join(plot_dir, filename)
 
     plt.figure()
-    plt.plot(values)
-    plt.xlabel('step')
+    if x_values is None:
+        plt.plot(values, marker='o')
+        plt.xlabel('record index')
+    else:
+        plt.plot(x_values, values, marker='o')
+        plt.xlabel('global step (batch number)')
     plt.ylabel('loss')
     plt.title('Training Loss')
     plt.grid(True)
+    plt.tight_layout()
     plt.savefig(path, dpi=dpi, bbox_inches='tight')
     plt.close()
     print(f"Saved plot to `{path}`")
 
 
-draw(loss)
+draw(loss, steps)
