@@ -75,7 +75,7 @@ net.to(device)
 from torch import optim
 criterion = nn.CrossEntropyLoss() .to(device)# 交叉熵损失函数
 optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9) # 使用SGD（随机梯度下降）优化
-num_epochs = 20 # 训练 20 个 epoch
+num_epochs = int(input("How many epoch do you want to train: "))  # 训练 x 个 epoch
 
 # %%
 def train(train_loader, model, num_of_epochs, Criterion, Optimizer, path_to_save, draw_loss=None):

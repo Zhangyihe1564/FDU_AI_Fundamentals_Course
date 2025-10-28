@@ -5,7 +5,7 @@ import torchvision.transforms as transforms
 from torchvision.transforms import ToPILImage
 import os
 
-save_path = './HW1/results'
+save_path = './HW1/results_regularization'
 os.makedirs(save_path, exist_ok=True)
 
 show = ToPILImage()
@@ -82,7 +82,7 @@ param_groups = [
     {"params": no_decay_params, "weight_decay": 0.0},
 ]
 optimizer = optim.SGD(param_groups, lr=0.001, momentum=0.9)  # 使用L2正则化的随机梯度下降优化器
-num_epochs = 6  # 训练 6 个 epoch
+num_epochs = int(input("How many epoch do you want to train: "))  # 训练 x 个 epoch
 
 
 # %%
@@ -143,7 +143,7 @@ accuracy = predict(testloader, dropout_net)
 import matplotlib.pyplot as plt
 
 
-def draw(values, plot_dir='./HW1/results/plots', filename=None, dpi=150):
+def draw(values, plot_dir='./HW1/results_regularization/plots', filename=None, dpi=150):
     """
     将折线图保存到指定文件夹。默认目录为 `./results/plots`。
     """
