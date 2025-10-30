@@ -34,8 +34,8 @@ def initialization():
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    model_save_path = './results_normal/models'
-    plot_save_path = './results_normal/plots'
+    model_save_path = './results_dropout/models'
+    plot_save_path = './results_dropout/plots'
     data_save_path = './data'
 
     if not exists(model_save_path):
@@ -70,34 +70,26 @@ def initialization():
                                              num_workers=0)
     print("DataLoader ready. Dataset downloaded.")
 
+    # 定义L2正则化系数
+    l2_lambda = 0.01
 
-    class Net(nn.Module):
+    class Net(nn.Module): #with Dropout
         def __init__(self):
-            # nn.Module子类的函数必须在构造函数中执行父类的构造函数
             super(Net, self).__init__()
-
-            # 卷积层 '3'表示输入图片为单通道, '6'表示输出通道数，'5'表示卷积核为5*5
             self.conv1 = nn.Conv2d(3, 6, 5)
-            # 卷积层
             self.conv2 = nn.Conv2d(6, 16, 5)
-            # 仿射层/全连接层，y = Wx + b
-            self.fc1   = nn.Linear(16*5*5, 120)
-            self.fc2   = nn.Linear(120, 84)
-            self.fc3   = nn.Linear(84, 10)
+            self.fc1 = nn.Linear(16 * 5 * 5, 120)
+            self.dropout = nn.Dropout(p=0.5)  # 添加Dropout层，丢弃概率为0.5
+            self.fc2 = nn.Linear(120, 84)
+            self.fc3 = nn.Linear(84, 10)
 
         def forward(self, x):
-            # 卷积 -> 激活 -> 池化 (relu激活函数不改变输入的形状)
-            # [batch size, 3, 32, 32] -- conv1 --> [batch size, 6, 28, 28] -- maxpool --> [batch size, 6, 14, 14]
             x = F.max_pool2d(F.relu(self.conv1(x)), (2, 2))
-            # [batch size, 6, 14, 14] -- conv2 --> [batch size, 16, 10, 10] --> maxpool --> [batch size, 16, 5, 5]
             x = F.max_pool2d(F.relu(self.conv2(x)), 2)
-            # 把 16 * 5 * 5 的特征图展平，变为 [batch size, 16 * 5 * 5]，以送入全连接层
             x = x.view(x.size()[0], -1)
-            # [batch size, 16 * 5 * 5] -- fc1 --> [batch size, 120]
             x = F.relu(self.fc1(x))
-            # [batch size, 120] -- fc2 --> [batch size, 84]
+            x = self.dropout(x)  # 在fc1和fc2之间应用Dropout
             x = F.relu(self.fc2(x))
-            # [batch size, 84] -- fc3 --> [batch size, 10]
             x = self.fc3(x)
             return x
 
@@ -106,7 +98,7 @@ def initialization():
     print("model initialized.")
 
     criterion = nn.CrossEntropyLoss() # 交叉熵损失函数
-    optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9) # 使用SGD（随机梯度下降）优化
+    optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9, weight_decay=l2_lambda) # 使用SGD（随机梯度下降）优化
     num_epochs = 20
 
     print("Initialization complete.")
@@ -114,7 +106,7 @@ def initialization():
 
     return (model_save_path, plot_save_path, num_epochs, criterion,
             optimizer, trainloader, testloader, net, show, transform,
-            batch_size, trainset, testset, device)
+            batch_size, trainset, testset, device, l2_lambda)
 
 
 def draw_loss_and_accuracy_curve(loss, steps, acc, epochs, path):
@@ -152,7 +144,8 @@ def predict(test_loader, model, device):
     return acc.item()
 
 
-def train(train_loader, test_loader, model, epochs, crit, opti, save_path, device):
+# 修改后的训练函数
+def train(train_loader, test_loader, model, epochs, crit, opti, save_path, device, l2_lambda):
     from torch import amp  # 使用新的 torch.amp 模块
 
     scaler = amp.GradScaler("cuda")  # 初始化 GradScaler，指定 "cuda" 以避免弃用警告
@@ -173,7 +166,11 @@ def train(train_loader, test_loader, model, epochs, crit, opti, save_path, devic
             # 2. 前向计算和反向传播（使用混合精度）
             with amp.autocast("cuda"):  # 启用自动混合精度，指定 "cuda"
                 outputs = model(inputs)  # 送入网络（正向传播）
-                loss = crit(outputs, labels)  # 计算损失函数
+                loss = crit(outputs, labels)  # 计算交叉熵损失
+
+                # 计算L2损失
+                l2_loss = sum(torch.sum(param ** 2) for param in model.parameters())
+                loss += l2_lambda * l2_loss  # 总损失 = 交叉熵损失 + L2损失
 
             # 3. 反向传播，更新参数（缩放梯度以处理半精度）
             scaler.scale(loss).backward()  # 缩放损失并反向传播
@@ -202,12 +199,13 @@ def train(train_loader, test_loader, model, epochs, crit, opti, save_path, devic
 
     print('Finished Training')
     return epochs_list, losses, accuracies
+
 # 在主代码中调用train并绘图
 if __name__ == "__main__":
 
     (model_path, plot_path, num_of_epochs, Criterion,
      Optimizer, trainLoader, testLoader, network, Show, Transform,
-     batchSize, trainSet, testSet, DEVICE) = initialization()
+     batchSize, trainSet, testSet, DEVICE, l2) = initialization()
 
     if torch.cuda.is_available():
         test_tensor = torch.randn(10000, 10000).to(DEVICE)
@@ -215,6 +213,6 @@ if __name__ == "__main__":
         print("GPU test completed")
 
     epoch_list, loss_list, accuracy_list = train(trainLoader, testLoader, network, num_of_epochs,
-                                                 Criterion, Optimizer, model_path, DEVICE)
+                                                 Criterion, Optimizer, model_path, DEVICE, l2)
 
     draw_loss_and_accuracy_curve(loss_list, epoch_list, accuracy_list, num_of_epochs, plot_path)
