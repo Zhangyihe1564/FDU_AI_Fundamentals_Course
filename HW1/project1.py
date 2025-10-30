@@ -10,6 +10,30 @@ from os import makedirs
 from os.path import exists
 
 def initialization():
+
+    class GPUDataset(torch.utils.data.Dataset):
+        def __init__(self, dataset, transforms=None, device=None):
+            if device is None:
+                device = 'cuda'  # 默认str
+            # 自动转换：如果device是str，转为torch.device；如果是torch.device，保持
+            device = torch.device(device) if isinstance(device, str) else device
+
+            # 加载数据到GPU：从numpy转为tensor，调整通道顺序，归一化到[0,1]，移到device
+            self.data = torch.from_numpy(dataset.data).permute(0, 3, 1, 2).float().to(device) / 255.0
+            self.targets = torch.tensor(dataset.targets).to(device)
+            self.transform = transforms
+
+        def __len__(self):
+            return len(self.targets)
+
+        def __getitem__(self, idx):
+            img, label = self.data[idx], self.targets[idx]
+            if self.transform:
+                img = self.transform(img)  # Normalize等在GPU上运行（torchvision支持）
+            return img, label
+
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
     model_save_path = './results_normal/models'
     plot_save_path = './results_normal/plots'
     data_save_path = './data'
@@ -28,17 +52,21 @@ def initialization():
          transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
          ])
 
-    batch_size = 128
+    norm_transform = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+
+    batch_size = 4
 
     trainset = torchvision.datasets.CIFAR10(root=data_save_path, train=True,
                                             download=True, transform=transform)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
-                                              shuffle=True, num_workers=8)
-
     testset = torchvision.datasets.CIFAR10(root=data_save_path, train=False,
                                            download=True, transform=transform)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
-                                             shuffle=False, num_workers=8)
+
+    trainset_gpu = GPUDataset(trainset, norm_transform, device=device)
+    testset_gpu = GPUDataset(testset, norm_transform, device=device)
+
+    trainloader = torch.utils.data.DataLoader(trainset_gpu, batch_size=batch_size, shuffle=True,
+                                          num_workers=0)  # num_workers=0，因为已在GPU
+    testloader = torch.utils.data.DataLoader(testset_gpu, batch_size=batch_size, shuffle=False, num_workers=0)
     print("DataLoader ready. Dataset downloaded.")
 
 
@@ -72,18 +100,20 @@ def initialization():
             x = self.fc3(x)
             return x
 
-    net = Net()
+    net = Net().to(device)
 
     print("model initialized.")
 
     criterion = nn.CrossEntropyLoss() # 交叉熵损失函数
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9) # 使用SGD（随机梯度下降）优化
-    num_epochs = 30
+    num_epochs = 20
 
     print("Initialization complete.")
+    print(f"Model is on device: {next(net.parameters()).device}")
 
     return (model_save_path, plot_save_path, num_epochs, criterion,
-            optimizer, trainloader, testloader, net, show, transform, batch_size, trainset, testset)
+            optimizer, trainloader, testloader, net, show, transform,
+            batch_size, trainset, testset, device)
 
 
 def draw_loss_and_accuracy_curve(loss, steps, acc, epochs, path):
@@ -104,29 +134,28 @@ def draw_loss_and_accuracy_curve(loss, steps, acc, epochs, path):
     plt.close()
 
 
-def predict(test_loader, model):
-    model.eval()  # 设置为评估模式
-    correct = 0  # 预测正确的图片数
-    total = 0  # 总共的图片数
-
-    with torch.no_grad():  # 正向传播时不计算梯度
+def predict(test_loader, model, device):
+    model.eval()
+    correct = 0
+    total = 0
+    with torch.no_grad():
         for data in test_loader:
-            # 1. 取出数据
             images, labels = data
-            # 2. 正向传播，得到输出结果
-            outputs = model(images)
-            # 3. 从输出中得到模型预测
+            images, labels = images.to(device), labels.to(device)
+            with torch.amp.autocast("cuda"):  # AMP加速测试
+                outputs = model(images)
             _, predicted = torch.max(outputs, 1)
-            # 4. 计算性能指标
             total += labels.size(0)
             correct += (predicted == labels).sum()
-
     acc = 100 * correct / total
-    print('测试集中的准确率为: %.2f %%' % acc)
-    return acc.item()  # 返回准确率作为浮点数
+    return acc.item()
 
 
-def train(train_loader, test_loader, model, epochs, crit, opti, save_path,):
+def train(train_loader, test_loader, model, epochs, crit, opti, save_path, device):
+    from torch import amp  # 使用新的 torch.amp 模块
+
+    scaler = amp.GradScaler("cuda")  # 初始化 GradScaler，指定 "cuda" 以避免弃用警告
+
     print("Start Training...")
     epochs_list = []
     losses = []
@@ -136,25 +165,22 @@ def train(train_loader, test_loader, model, epochs, crit, opti, save_path,):
         for i, data in enumerate(train_loader, 0):
             # 1. 取出数据
             inputs, labels = data
+            inputs, labels = inputs.to(device), labels.to(device)
             # 梯度清零
             opti.zero_grad()
 
-            # 2. 前向计算和反向传播
-            outputs = model(inputs)  # 送入网络（正向传播）
-            loss = crit(outputs, labels)  # 计算损失函数
+            # 2. 前向计算和反向传播（使用混合精度）
+            with amp.autocast("cuda"):  # 启用自动混合精度，指定 "cuda"
+                outputs = model(inputs)  # 送入网络（正向传播）
+                loss = crit(outputs, labels)  # 计算损失函数
 
-            # 3. 反向传播，更新参数
-            loss.backward()  # 反向传播
-            opti.step()
+            # 3. 反向传播，更新参数（缩放梯度以处理半精度）
+            scaler.scale(loss).backward()  # 缩放损失并反向传播
+            scaler.step(opti)  # 更新优化器
+            scaler.update()  # 更新 scaler 以处理梯度裁剪
 
-            # 累积损失
+            # 累积损失（注意：loss.item() 是 float32 值）
             epoch_loss += loss.item()
-
-            # 下面的这段代码对于训练无实际作用，仅用于观察训练状态
-            if i % 1000 == 999:  # 每1000个batch打印一下训练状态
-                loss_temp = epoch_loss / 1000
-                print('epoch %d: batch %5d loss: %.3f' \
-                      % (epoch + 1, i + 1, loss_temp))
 
         # 计算每轮平均损失
         avg_loss = epoch_loss / len(train_loader)
@@ -163,7 +189,7 @@ def train(train_loader, test_loader, model, epochs, crit, opti, save_path,):
         torch.save(model.state_dict(), f"{save_path}/epoch_{epoch + 1}_model.pth")
 
         # 调用predict并获取准确率
-        acc = predict(test_loader, model)
+        acc = predict(test_loader, model, device)
 
         # 输出轮数、平均损失和准确率
         print(f'轮数: {epoch + 1}, 平均损失: {avg_loss:.3f}, 准确率: {acc:.2f}%')
@@ -175,12 +201,23 @@ def train(train_loader, test_loader, model, epochs, crit, opti, save_path,):
 
     print('Finished Training')
     return epochs_list, losses, accuracies
-
 # 在主代码中调用train并绘图
 if __name__ == "__main__":
+
     (model_path, plot_path, num_of_epochs, Criterion,
      Optimizer, trainLoader, testLoader, network, Show, Transform,
-     batchSize, trainSet, testSet) = initialization()
+     batchSize, trainSet, testSet, DEVICE) = initialization()
+
+    print(torch.cuda.is_available())  # 应为 True
+    print(torch.cuda.get_device_name(0))  # 显示你的 GPU 名，如 'NVIDIA GeForce RTX 4060 Laptop GPU'
+    print(next(network.parameters()).device)  # 应为 'cuda:0'
+
+    if torch.cuda.is_available():
+        test_tensor = torch.randn(10000, 10000).to(DEVICE)
+        result = torch.matmul(test_tensor, test_tensor)
+        print("GPU test completed")
+
     epoch_list, loss_list, accuracy_list = train(trainLoader, testLoader, network, num_of_epochs,
-                                                 Criterion, Optimizer, model_path)
+                                                 Criterion, Optimizer, model_path, DEVICE)
+
     draw_loss_and_accuracy_curve(loss_list, epoch_list, accuracy_list, num_of_epochs, plot_path)
