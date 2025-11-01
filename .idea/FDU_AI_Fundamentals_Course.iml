@@ -3,8 +3,9 @@
   <component name="NewModuleRootManager">
     <content url="file://$MODULE_DIR$">
       <excludeFolder url="file://$MODULE_DIR$/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/HW1/.venv" />
     </content>
-    <orderEntry type="jdk" jdkName="uv (FDU_AI_Fundamentals_Course) (2)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="uv (HW1)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="PyDocumentationSettings">

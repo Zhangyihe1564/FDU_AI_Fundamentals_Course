@@ -3,6 +3,7 @@ import torchvision
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as transforms
+from torch.utils.data import DataLoader
 from torchvision.transforms import ToPILImage
 from torch import optim
 import matplotlib.pyplot as plt
@@ -12,30 +13,32 @@ from os.path import exists
 def initialization():
 
     class GPUDataset(torch.utils.data.Dataset):
-        def __init__(self, dataset, transForms=None, Device=None):
-            if Device is None:
-                Device = 'cuda'  # 默认str
-            # 自动转换：如果device是str，转为torch.device；如果是torch.device，保持
-            Device = torch.device(Device) if isinstance(Device, str) else Device
+        def __init__(self, dataset, device=None):
+            if device is None:
+                device = 'cuda'
+            self.device = torch.device(device) if isinstance(device, str) else device
 
-            # 加载数据到GPU：从numpy转为tensor，调整通道顺序，归一化到[0,1]，移到device
-            self.data = torch.from_numpy(dataset.data).permute(0, 3, 1, 2).float().to(Device) / 255.0
-            self.targets = torch.tensor(dataset.targets).to(Device)
-            self.transform = transForms
+            # 转为 float32 并归一化到 [0,1]
+            data = torch.from_numpy(dataset.data).permute(0, 3, 1, 2).float() / 255.0
+
+            # 应用 CIFAR-10 标准归一化
+            mean = torch.tensor([0.4914, 0.4822, 0.4465]).view(1, 3, 1, 1)
+            std = torch.tensor([0.2470, 0.2435, 0.2616]).view(1, 3, 1, 1)
+            data = (data - mean) / std
+
+            self.data = data.to(self.device)
+            self.targets = torch.tensor(dataset.targets, dtype=torch.long).to(self.device)
 
         def __len__(self):
             return len(self.targets)
 
         def __getitem__(self, idx):
-            img, label = self.data[idx], self.targets[idx]
-            if self.transform:
-                img = self.transform(img)  # Normalize等在GPU上运行（torchvision支持）
-            return img, label
+            return self.data[idx], self.targets[idx]  # 无需 transform
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    model_save_path = './results_normal/models'
-    plot_save_path = './results_normal/plots'
+    model_save_path = './results_dropout/models'
+    plot_save_path = './results_dropout/plots'
     data_save_path = './data'
 
     if not exists(model_save_path):
@@ -52,24 +55,17 @@ def initialization():
          transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
          ])
 
-    norm_transform = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    batch_size = 64
 
-    batch_size = 32
+    trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True)
+    testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True)
 
-    trainset = torchvision.datasets.CIFAR10(root=data_save_path, train=True,
-                                            download=True, transform=transform)
-    testset = torchvision.datasets.CIFAR10(root=data_save_path, train=False,
-                                           download=True, transform=transform)
+    train_gpu = GPUDataset(trainset, device='cuda')
+    test_gpu = GPUDataset(testset, device='cuda')
 
-    trainset_gpu = GPUDataset(trainset, norm_transform, Device=device)
-    testset_gpu = GPUDataset(testset, norm_transform, Device=device)
-
-    trainloader = torch.utils.data.DataLoader(trainset_gpu, batch_size=batch_size, shuffle=True,
-                                          num_workers=0)  # num_workers=0，因为已在GPU
-    testloader = torch.utils.data.DataLoader(testset_gpu, batch_size=batch_size, shuffle=False,
-                                             num_workers=0)
+    trainloader = DataLoader(train_gpu, batch_size=128, shuffle=True, num_workers=0)
+    testloader = DataLoader(test_gpu, batch_size=128, shuffle=False, num_workers=0)
     print("DataLoader ready. Dataset downloaded.")
-
 
     class Net(nn.Module):
         def __init__(self):
@@ -107,7 +103,7 @@ def initialization():
 
     criterion = nn.CrossEntropyLoss() # 交叉熵损失函数
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9) # 使用SGD（随机梯度下降）优化
-    num_epochs = 20
+    num_epochs = 200
 
     print("Initialization complete.")
     print(f"Model is on device: {next(net.parameters()).device}")
@@ -117,7 +113,7 @@ def initialization():
             batch_size, trainset, testset, device)
 
 
-def draw_loss_and_accuracy_curve(loss, steps, acc, epochs, path):
+def draw_loss_and_accuracy_curve(loss, steps, train_acc, test_acc, epochs, path):
     fig, ax1 = plt.subplots()
     ax1.plot(steps, loss, 'b-', label='Training Loss')
     ax1.set_xlabel('Epochs')
@@ -125,9 +121,15 @@ def draw_loss_and_accuracy_curve(loss, steps, acc, epochs, path):
     ax1.tick_params(axis='y', labelcolor='b')
 
     ax2 = ax1.twinx()
-    ax2.plot(steps, acc, 'r-', label='Accuracy')
+    ax2.plot(steps, train_acc, 'r-', label='Train Accuracy')
+    ax2.plot(steps, test_acc, 'g-', label='Test Accuracy')
     ax2.set_ylabel('Accuracy', color='r')
     ax2.tick_params(axis='y', labelcolor='r')
+
+    # 合并图例
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
 
     plt.title(f'Training Loss and Accuracy Curve over {epochs} Epochs')
     fig.tight_layout()
@@ -160,9 +162,14 @@ def train(train_loader, test_loader, model, epochs, crit, opti, save_path, devic
     print("Start Training...")
     epochs_list = []
     losses = []
-    accuracies = []
+    train_accuracies = []
+    test_accuracies = []
     for epoch in range(epochs):
         epoch_loss = 0.0  # 初始化每轮损失
+        train_correct = 0
+        train_total = 0
+
+        model.train()
         for i, data in enumerate(train_loader, 0):
             # 1. 取出数据
             inputs, labels = data
@@ -175,6 +182,11 @@ def train(train_loader, test_loader, model, epochs, crit, opti, save_path, devic
                 outputs = model(inputs)  # 送入网络（正向传播）
                 loss = crit(outputs, labels)  # 计算损失函数
 
+                # 统计训练集预测正确数（在同一前向输出上）
+                _, predicted = torch.max(outputs, 1)
+                train_total += labels.size(0)
+                train_correct += (predicted == labels).sum().item()
+
             # 3. 反向传播，更新参数（缩放梯度以处理半精度）
             scaler.scale(loss).backward()  # 缩放损失并反向传播
             scaler.step(opti)  # 更新优化器
@@ -183,25 +195,27 @@ def train(train_loader, test_loader, model, epochs, crit, opti, save_path, devic
             # 累积损失（注意：loss.item() 是 float32 值）
             epoch_loss += loss.item()
 
-        # 计算每轮平均损失
+        # 计算每轮平均损失与训练准确率
         avg_loss = epoch_loss / len(train_loader)
+        train_acc = 100.0 * train_correct / train_total if train_total > 0 else 0.0
 
         # 保存模型
         torch.save(model.state_dict(), f"{save_path}/epoch_{epoch + 1}_model.pth")
 
-        # 调用predict并获取准确率
-        acc = predict(test_loader, model, device)
+        # 调用predict并获取测试集准确率
+        test_acc = predict(test_loader, model, device)
 
         # 输出轮数、平均损失和准确率
-        print(f'轮数: {epoch + 1}, 平均损失: {avg_loss:.3f}, 准确率: {acc:.2f}%')
+        print(f'轮数: {epoch + 1}, 平均损失: {avg_loss:.3f}, 训练准确率: {train_acc:.2f}%, 测试准确率: {test_acc:.2f}%')
 
         # 收集数据到数组
         epochs_list.append(epoch + 1)
         losses.append(avg_loss)
-        accuracies.append(acc)
+        train_accuracies.append(train_acc)
+        test_accuracies.append(test_acc)
 
     print('Finished Training')
-    return epochs_list, losses, accuracies
+    return epochs_list, losses, train_accuracies, test_accuracies
 # 在主代码中调用train并绘图
 if __name__ == "__main__":
 
@@ -214,7 +228,7 @@ if __name__ == "__main__":
         result = torch.matmul(test_tensor, test_tensor)
         print("GPU test completed")
 
-    epoch_list, loss_list, accuracy_list = train(trainLoader, testLoader, network, num_of_epochs,
+    epoch_list, loss_list, train_accuracy_list, test_accuracy_list = train(trainLoader, testLoader, network, num_of_epochs,
                                                  Criterion, Optimizer, model_path, DEVICE)
 
-    draw_loss_and_accuracy_curve(loss_list, epoch_list, accuracy_list, num_of_epochs, plot_path)
+    draw_loss_and_accuracy_curve(loss_list, epoch_list, train_accuracy_list, test_accuracy_list, num_of_epochs, plot_path)
