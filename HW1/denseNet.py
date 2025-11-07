@@ -94,7 +94,7 @@ def initialization():
             return self.pool(out)
 
     class DenseNet_CIFAR(nn.Module):
-        def __init__(self, block_config=(6, 6, 6, 6), growth_rate=12, num_classes=10):
+        def __init__(self, block_config=(4, 4, 4, 4), growth_rate=16, num_classes=10):
             super().__init__()
             num_channels = 2 * growth_rate
             self.conv0 = nn.Conv2d(3, num_channels, kernel_size=3, padding=1, bias=False)
@@ -134,7 +134,7 @@ def initialization():
     # ----------------------------
     # 模型、损失、优化器
     # ----------------------------
-    model = DenseNet_CIFAR(block_config=(6, 6, 6, 6), growth_rate=12, num_classes=10).to(device)
+    model = DenseNet_CIFAR(block_config=(4, 4, 4, 4), growth_rate=16, num_classes=10).to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100, eta_min=0)

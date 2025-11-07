@@ -4,6 +4,7 @@
       <w>avgpool</w>
       <w>batchnorm</w>
       <w>blks</w>
+      <w>cifar</w>
       <w>convs</w>
       <w>maxpool</w>
       <w>testloader</w>

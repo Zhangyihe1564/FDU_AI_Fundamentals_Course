@@ -62,8 +62,8 @@ def initialization():
     train_gpu = GPUDataset(trainset, device='cuda')
     test_gpu = GPUDataset(testset, device='cuda')
 
-    trainloader = DataLoader(train_gpu, batch_size=128, shuffle=True, num_workers=0)
-    testloader = DataLoader(test_gpu, batch_size=128, shuffle=False, num_workers=0)
+    trainloader = DataLoader(train_gpu, batch_size=64, shuffle=True, num_workers=0)
+    testloader = DataLoader(test_gpu, batch_size=64, shuffle=False, num_workers=0)
     print("DataLoader ready. Dataset downloaded.")
 
     # 定义L2正则化系数
@@ -75,7 +75,7 @@ def initialization():
             self.conv1 = nn.Conv2d(3, 6, 5)
             self.conv2 = nn.Conv2d(6, 16, 5)
             self.fc1 = nn.Linear(16 * 5 * 5, 120)
-            self.dropout = nn.Dropout(p=0.5)  # 添加Dropout层，丢弃概率为0.5
+            self.dropout = nn.Dropout(p=0.7)  # 添加Dropout层，丢弃概率为0.5
             self.fc2 = nn.Linear(120, 84)
             self.fc3 = nn.Linear(84, 10)
 
@@ -95,7 +95,7 @@ def initialization():
 
     criterion = nn.CrossEntropyLoss() # 交叉熵损失函数
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9, weight_decay=l2_lambda) # 使用SGD（随机梯度下降）优化
-    num_epochs = 200
+    num_epochs = 100
 
     print("Initialization complete.")
     print(f"Model is on device: {next(net.parameters()).device}")
@@ -125,7 +125,7 @@ def draw_loss_and_accuracy_curve(loss, steps, train_acc, test_acc, epochs, path)
 
     plt.title(f'Training Loss and Accuracy Curve over {epochs} Epochs')
     fig.tight_layout()
-    plt.savefig(f"{path}/loss_and_accuracy_curve.png")
+    plt.savefig(f"{path}/loss_and_accuracy_curve(dropout_p=0.7).png")
     plt.close()
 
 def predict(test_loader, model, device):

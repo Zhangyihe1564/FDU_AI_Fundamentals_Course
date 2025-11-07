@@ -37,8 +37,8 @@ def initialization():
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    model_save_path = './results_dropout/models'
-    plot_save_path = './results_dropout/plots'
+    model_save_path = './results_normal/models'
+    plot_save_path = './results_normal/plots'
     data_save_path = './data'
 
     if not exists(model_save_path):
@@ -55,7 +55,7 @@ def initialization():
          transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
          ])
 
-    batch_size = 64
+    batch_size = 128
 
     trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True)
     testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True)
@@ -63,8 +63,8 @@ def initialization():
     train_gpu = GPUDataset(trainset, device='cuda')
     test_gpu = GPUDataset(testset, device='cuda')
 
-    trainloader = DataLoader(train_gpu, batch_size=128, shuffle=True, num_workers=0)
-    testloader = DataLoader(test_gpu, batch_size=128, shuffle=False, num_workers=0)
+    trainloader = DataLoader(train_gpu, batch_size=64, shuffle=True, num_workers=0)
+    testloader = DataLoader(test_gpu, batch_size=64, shuffle=False, num_workers=0)
     print("DataLoader ready. Dataset downloaded.")
 
     class Net(nn.Module):
@@ -103,7 +103,7 @@ def initialization():
 
     criterion = nn.CrossEntropyLoss() # 交叉熵损失函数
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9) # 使用SGD（随机梯度下降）优化
-    num_epochs = 200
+    num_epochs = 100
 
     print("Initialization complete.")
     print(f"Model is on device: {next(net.parameters()).device}")
