@@ -1,24 +1,20 @@
-\documentclass[UTF8,fontset=windows]{ctexart}  % Article class with built-in Chinese support
+\documentclass[UTF8,fontset=windows]{ctexart}
 \usepackage{geometry}
 \geometry{a4paper, scale=0.8}
-% Packages for math equations
-\usepackage{amsmath}  % Enhanced math typesetting
-\usepackage{amssymb}  % Additional math symbols
-\usepackage{caption}
-% Packages for pictures (using graphicx)
-\usepackage{graphicx}  % For including images
-\graphicspath{{images/}}  % Optional: specify path to image directory
-\usepackage{float}  % Provides the H float specifier
 
-% For professional table rules (\toprule, \midrule, \bottomrule)
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{caption}
+
+\usepackage{graphicx}
+\graphicspath{{images/}}
+\usepackage{float}
+
 \usepackage{booktabs}
 
-% Packages for code blocks (using listings)
 \usepackage{listings}
-\usepackage{xcolor}  % For syntax highlighting colors
+\usepackage{xcolor}
 \pagestyle{plain}
-
-% 配置代码块样式
 \lstset{
     language=Python,
     basicstyle=\ttfamily\small,
@@ -73,9 +69,8 @@ CIFAR-10数据集作为一个经典的图像分类数据集，包含了10个类�
 \begin{enumerate}
     \item \textbf{初始化数据结构}：在训练开始前，创建空列表 \texttt{train\_losses} ，用于存储每个 epoch 的训练和测试损失值。
     \item \textbf{修改训练循环}：在每个 epoch 的训练循环结束后，计算并记录当前 epoch 的平均训练损失值，并将其添加到 \texttt{train\_losses} 列表中。
-    \item \textbf{测试模型}：在每个 epoch 结束后，使用测试数据集评估模型性能，并记录 \texttt{test\_acc} 和 \texttt{train\_acc} 。
-    \item \textbf{绘制损失曲线}：在所有 epoch 训练完成后，将数据传入自定义的draw\_loss\_and\_accuracy\_curve函数，使用 Matplotlib 库绘制训练和测试损失曲线。X 轴表示 epoch 数，Y 轴表示损失值和准确率。
-    \item 使用不同颜色的线条区分训练和测试损失曲线及正确率，并添加图例、标题和轴标签以提高可读性。
+    \item \textbf{测试模型}：在每轮训练结束后，使用测试数据集评估模型性能，记录 \texttt{test\_acc} 和 \texttt{train\_acc} 。
+    \item \textbf{绘制损失曲线}：在训练完成后，将数据传入自定义的draw\_loss\_and\_accuracy\_curve函数，使用 Matplotlib 库绘制训练和测试损失曲线。X轴表示 epoch 数，Y轴表示损失值和准确率。同时使用不同颜色的线条区分训练和测试损失曲线及正确率，并添加图例、标题和轴标签以提高可读性。
     \item \textbf{保存图像}：最后，将绘制的图像保存为文件。通过以上步骤，我们可以清晰地观察到模型在训练过程中的损失和准确率变化情况，从而评估模型的训练效果和泛化能力。
 \end{enumerate}
 
@@ -117,8 +112,11 @@ h' = h \cdot \frac{\text{mask}}{1 - p}
 
 \section{实验}
 \subsection{Task1：绘制损失函数曲线}
-这部分使用给定的Net结构和优化器，训练LeNet 网络，并在每个epoch 结束后记录训练和测试损失值以及准确率。通过调用\texttt{draw\_loss\_and\_accuracy\_curve}函数绘制损失和准确率曲线。该函数代码如下：
-\begin{lstlisting}
+这部分使用给定的Net结构和优化器，训练LeNet 网络，并在每个epoch 结束后记录训练和测试损失值以及准确率。通过调用\texttt{draw\_loss\_and\_accuracy\_curve}函数绘制损失和准确率曲线。该函数代码如Listing\ref{func01}：
+\begin{lstlisting}[
+    caption={绘制损失和准确率曲线函数}, 
+    label={func01}
+]
 def draw_loss_and_accuracy_curve(loss, steps, train_acc, test_acc, epochs, path):
     fig, ax1 = plt.subplots()
     ax1.plot(steps, loss, 'b-', label='Training Loss')
@@ -158,10 +156,13 @@ def draw_loss_and_accuracy_curve(loss, steps, train_acc, test_acc, epochs, path)
 \begin{enumerate}
     \item \textbf{L2正则化}：在优化器中添加\texttt{weight\_decay}参数来实现L2正则化。代码示例如下：
     \begin{lstlisting}
-optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9, weight_decay=0.0001)
+    optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9, weight_decay=0.0001)
     \end{lstlisting}
-    \item \textbf{Dropout}：在LeNet的\texttt{\_\_init\_\_}方法中添加Dropout层，并在\texttt{forward}方法中应用。代码示例如下：
-    \begin{lstlisting}
+    \item \textbf{Dropout}：在LeNet的\texttt{\_\_init\_\_}方法中添加Dropout层，并在\texttt{forward}方法中应用。代码示例如Listing\ref{func02}：
+    \begin{lstlisting}[
+        caption={修改后的LeNet网络结构}, 
+        label={func02}
+    ]
     class Net(nn.Module):
         def __init__(self):
             super(Net, self).__init__()
@@ -321,11 +322,13 @@ optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9, weight_decay=0.0
 \end{figure}
 
 \subsubsection{网络结构设计}
-DenseNet的核心思想是通过密集连接将每一层的输出与后续所有层的输入进行拼接，
-从而实现特征的复用和信息的高效传递。具体设计如下：
+DenseNet的核心思想是通过密集连接将每一层的输出与后续所有层的输入进行拼接，从而实现特征的复用和信息的高效传递。具体结构设计如下：
 \begin{enumerate}
     \item Bottleneck Layer:
-    \begin{lstlisting}
+    \begin{lstlisting}[
+        caption={Bottleneck Layer实现}, 
+        label={func03}
+    ]
     class Bottleneck(nn.Module):
         def __init__(self, in_channels, growth_rate):
             super().__init__()
@@ -451,8 +454,15 @@ DenseNet的核心思想是通过密集连接将每一层的输出与后续所有
 \end{enumerate}
 
 \subsubsection{训练设置}
-初始化代码和数据处理部分如下：
-\begin{lstlisting}
+初始化代码和数据处理部分如Listing\ref{func04}：
+\begin{lstlisting}[
+    caption={DenseNet\_CIFAR训练设置}, 
+    label={func04}
+]
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+    if device.type == "cuda":
+        print(f"GPU: {torch.cuda.get_device_name(0)}")
     mean = (0.4914, 0.4822, 0.4465)
     std = (0.2023, 0.1994, 0.2010)
     transform_train = transforms.Compose([
@@ -466,25 +476,24 @@ DenseNet的核心思想是通过密集连接将每一层的输出与后续所有
         transforms.ToTensor(),
         transforms.Normalize(mean, std),
     ])
-    trainset = torchvision.datasets.CIFAR10(root='./data', 
-        train=True, download=True, transform=transform_train)
-    trainloader = DataLoader(trainset, batch_size=64, 
-        shuffle=True, num_workers=4, pin_memory=True)
-    testset = torchvision.datasets.CIFAR10(root='./data', 
-        train=False, download=True, transform=transform_test)
-    testloader = DataLoader(testset, batch_size=64, 
-        shuffle=False, num_workers=4, pin_memory=True)
+    trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform_train)
+    trainloader = DataLoader(trainset, batch_size=64, shuffle=True, num_workers=4, pin_memory=True)
+    testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_test)
+    testloader = DataLoader(testset, batch_size=64, shuffle=False, num_workers=4, pin_memory=True)
 \end{lstlisting}
-以及优化器和损失函数设定：
-\begin{lstlisting}
+以及优化器和损失函数设定如Listing\ref{func05}：
+\begin{lstlisting}[
+    caption={DenseNet\_CIFAR优化器和损失函数设定}, 
+    label={func05}
+]
+    model = DenseNet_CIFAR(block_config=(4, 4, 4, 4), growth_rate=16, num_classes=10).to(device)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model.parameters(), 
-        lr=0.1, momentum=0.9, weight_decay=1e-4)
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, 
-        T_max=100, eta_min=0)
+    optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=1e-4)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100, eta_min=0)
 \end{lstlisting}
 解释如下：
 \begin{enumerate}
+    \item 使用GPU加速训练（如可用）。
     \item 参考torchvision 推荐的均值和标准差对CIFAR-10数据集进行归一化处理。
     \item 数据增强包括随机裁剪、水平翻转和随机擦除，以增强模型的泛化能力，减少过拟合。
     \item 优化器使用SGD，学习率初始为0.1。
@@ -530,7 +539,7 @@ DenseNet的核心思想是通过密集连接将每一层的输出与后续所有
     \item \textbf{特征复用}：DenseNet通过密集连接实现了高效的特征复用，提升了信息流动和梯度传播效率。
     \item \textbf{正则化效果}：结合Dropout和L2正则化，有效抑制了过拟合，提升了模型的泛化能力。
 \end{enumerate}
-查阅原始论文知，类似层数的DenseNet-40(with bottleneck)在300轮训练后准确率接近94.06\%。
+查阅原始论文知，类似层数的DenseNet(L=40, k=12)在300轮训练后准确率接近94.76\%（使用增强的CIFAR-10数据集）。
 由此看来，本次实验实现的DenseNet\_CIFAR在100轮训练后达到92.93\%的准确率，表现出色，验证了DenseNet结构在图像分类任务中的有效性。
 
 \section{结果与分析}

@@ -19,7 +19,6 @@ def set_seed(seed=42):
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
-    # 保证 CUDA 算子确定性（但可能降低速度）
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
@@ -29,9 +28,8 @@ def initialization():
     if device.type == "cuda":
         print(f"GPU: {torch.cuda.get_device_name(0)}")
 
-    # ✅ 修正：使用标准 CIFAR-10 的均值和标准差
     mean = (0.4914, 0.4822, 0.4465)
-    std = (0.2023, 0.1994, 0.2010)  # 原始论文和 torchvision 推荐值
+    std = (0.2023, 0.1994, 0.2010)
 
     transform_train = transforms.Compose([
         transforms.RandomCrop(32, padding=4),
@@ -52,7 +50,6 @@ def initialization():
     testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_test)
     testloader = DataLoader(testset, batch_size=64, shuffle=False, num_workers=4, pin_memory=True)
 
-    # ✅ 修正：Bottleneck 正确实现（保持不变，这部分没问题）
     class Bottleneck(nn.Module):
         def __init__(self, in_channels, growth_rate):
             super().__init__()
@@ -74,11 +71,11 @@ def initialization():
             current_channels = in_channels
             for i in range(n_layers):
                 self.layers.append(Bottleneck(current_channels, growth_rate))
-                current_channels += growth_rate  # 每层输出增加 growth_rate 通道
+                current_channels += growth_rate
 
         def forward(self, x):
             for layer in self.layers:
-                x = layer(x)  # x 自动累积通道
+                x = layer(x)
             return x
 
     class Transition(nn.Module):
@@ -131,9 +128,6 @@ def initialization():
             out = self.classifier(out)
             return out
 
-    # ----------------------------
-    # 模型、损失、优化器
-    # ----------------------------
     model = DenseNet_CIFAR(block_config=(4, 4, 4, 4), growth_rate=16, num_classes=10).to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=1e-4)
@@ -172,18 +166,16 @@ def predict(test_loader, model, device):
             images, labels = data
             images = images.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
-            # 移除 AMP：推理不需要，且避免设备绑定
             outputs = model(images)
             _, predicted = torch.max(outputs, 1)
             total += labels.size(0)
-            correct += (predicted == labels).sum().item()  # ✅ 转为 Python 数值
-    return 100.0 * correct / total  # ✅ 直接返回 float
+            correct += (predicted == labels).sum().item()
+    return 100.0 * correct / total
 
 def train(train_loader, test_loader, model, epochs, crit, opti, scheduler, save_path, device):
     import os
     os.makedirs(save_path, exist_ok=True)
 
-    # ✅ 动态启用 AMP
     use_amp = (device.type == 'cuda')
     if use_amp:
         scaler = torch.amp.GradScaler('cuda')
@@ -224,14 +216,12 @@ def train(train_loader, test_loader, model, epochs, crit, opti, scheduler, save_
             train_total += labels.size(0)
             train_correct += (predicted == labels).sum().item()
 
-        # ✅ 关键：更新学习率！
         scheduler.step()
 
         avg_loss = epoch_loss / len(train_loader)
         train_acc = 100.0 * train_correct / train_total
         test_acc = predict(test_loader, model, device)
 
-        # ✅ 只保存最佳模型（或定期保存）
         if epoch == 0 or test_acc > max(test_accuracies, default=0):
             torch.save(model.state_dict(), f"{save_path}/best_model.pth")
         if (epoch + 1) % 20 == 0:  # 每20轮保存一次
