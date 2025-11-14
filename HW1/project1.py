@@ -130,7 +130,7 @@ def predict(test_loader, model, device):
         for data in test_loader:
             images, labels = data
             images, labels = images.to(device), labels.to(device)
-            with torch.amp.autocast("cuda"):  # AMP加速测试
+            with torch.amp.autocast("cuda"):  
                 outputs = model(images)
             _, predicted = torch.max(outputs, 1)
             total += labels.size(0)

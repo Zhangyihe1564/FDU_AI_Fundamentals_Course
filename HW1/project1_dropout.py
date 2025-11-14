@@ -9,11 +9,6 @@ from torch import optim
 import matplotlib.pyplot as plt
 from os import makedirs
 from os.path import exists
- 
-# 简要说明：
-# 该脚本实现了一个带 Dropout 的简单卷积神经网络用于 CIFAR-10 数据集的训练与评估。
-# 我在关键步骤（数据预处理、模型定义、训练/验证流程、结果可视化）处添加了中文注释，
-# 以便阅读和教学用途。
 
 def initialization():
     class GPUDataset(torch.utils.data.Dataset):
