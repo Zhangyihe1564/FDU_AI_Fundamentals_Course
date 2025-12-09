@@ -144,7 +144,7 @@ def initialization():
             out = self.classifier(out)
             return out
 
-    # 实例化模型并移动到设备
+    # 实例化模型并移动到GPU
     model = DenseNet_CIFAR(block_config=(4, 4, 4, 4), growth_rate=16, num_classes=10).to(device)
     criterion = nn.CrossEntropyLoss()
     # 优化器中 weight_decay 即 L2 正则化系数，用于控制权重大小（防止过拟合）
@@ -203,7 +203,6 @@ def train(train_loader, test_loader, model, epochs, crit, opti, scheduler, save_
     # 是否使用 AMP（仅在 CUDA 可用时）
     use_amp = (device.type == 'cuda')
     if use_amp:
-        # 注意：GradScaler 的标准用法为 GradScaler()，此处保持原代码调用签名
         scaler = torch.amp.GradScaler('cuda')
 
     print("Start Training...")

@@ -8,7 +8,11 @@ import matplotlib.font_manager as font_manager
 import matplotlib.pyplot as plt
 import torch
 import transformers
-from IPython.display import set_matplotlib_formats
+try:
+    from IPython.display import set_matplotlib_formats
+except ImportError:
+    from matplotlib_inline import backend_inline
+    set_matplotlib_formats = backend_inline.set_matplotlib_formats
 
 is_gpu_available = torch.cuda.is_available()
 

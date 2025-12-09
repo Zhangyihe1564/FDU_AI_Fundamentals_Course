@@ -6,7 +6,9 @@
       <w>blks</w>
       <w>cifar</w>
       <w>convs</w>
+      <w>distilbert</w>
       <w>maxpool</w>
+      <w>preds</w>
       <w>testloader</w>
       <w>testset</w>
       <w>trainloader</w>
