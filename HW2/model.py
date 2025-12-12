@@ -102,24 +102,26 @@ def prepare_datasets(
 
     return emotions, emotions_encoded, emotions_hidden
 
+
 # python
+# HW2/model.py - 修改 make_trainer 函数
 def make_trainer(model, tokenizer, emotions_encoded, config: Dict[str, Any]):
     import inspect
     from transformers import DataCollatorWithPadding
 
-    batch_size = config.get("per_device_train_batch_size", 8)
+    train_batch_size = config.get("per_device_train_batch_size", 8)
+    eval_batch_size = config.get("per_device_eval_batch_size", 8)
     gradient_accumulation = config.get("gradient_accumulation_steps", 1)
-    logging_steps = max(1, len(emotions_encoded["train"]) // max(1, batch_size))
+    logging_steps = max(1, len(emotions_encoded["train"]) // max(1, train_batch_size // gradient_accumulation) // 10)
 
-    # data collator 使用 tokenizer 进行动态 padding（替代传递 tokenizer 给 Trainer）
     data_collator = DataCollatorWithPadding(tokenizer)
 
     base_args = {
         "output_dir": config.get("output_dir", "./output"),
-        "num_train_epochs": config.get("num_train_epochs", 1),
+        "num_train_epochs": config.get("num_train_epochs", 20),
         "learning_rate": config.get("learning_rate", 1e-3),
-        "per_device_train_batch_size": batch_size,
-        "per_device_eval_batch_size": config.get("per_device_eval_batch_size", batch_size),
+        "per_device_train_batch_size": train_batch_size,  # 改这里
+        "per_device_eval_batch_size": eval_batch_size,  # 改这里
         "weight_decay": config.get("weight_decay", 0.01),
         "evaluation_strategy": config.get("evaluation_strategy", "epoch"),
         "disable_tqdm": config.get("disable_tqdm", True),
@@ -144,7 +146,7 @@ def make_trainer(model, tokenizer, emotions_encoded, config: Dict[str, Any]):
         compute_metrics=compute_metrics,
         train_dataset=emotions_encoded["train"],
         eval_dataset=emotions_encoded["validation"],
-        data_collator=data_collator  # 使用 data_collator 替代 tokenizer 参数
+        data_collator=data_collator
     )
     return trainer
 
