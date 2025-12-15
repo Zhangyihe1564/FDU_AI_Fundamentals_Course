@@ -1,7 +1,5 @@
-# python
 import os
 import torch
-import numpy as np
 from datasets import load_dataset
 from sklearn.metrics import accuracy_score, f1_score
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, TrainingArguments, Trainer
@@ -36,8 +34,6 @@ def init_model_and_tokenizer(
 
     tokenizer = AutoTokenizer.from_pretrained(model_ckpt, use_fast=True, force_download=force_download)
 
-    # 不在此处强制将模型以 half 加载或调用 model.half()
-    # 由 Trainer 的 fp16 参数统一管理 AMP（推荐）
     load_kwargs = {}
     if low_cpu_mem_usage:
         load_kwargs["low_cpu_mem_usage"] = True
@@ -45,7 +41,6 @@ def init_model_and_tokenizer(
     model = AutoModelForSequenceClassification.from_pretrained(model_ckpt, num_labels=num_labels, **load_kwargs)
     model.to(device)
 
-    # 不要在这里调用 model.half() 当你同时在 Trainer 中使用 fp16=True 时会导致错误
     return tokenizer, model, device
 
 def prepare_datasets(
@@ -102,15 +97,12 @@ def prepare_datasets(
 
     return emotions, emotions_encoded, emotions_hidden
 
-
-# python
-# HW2/model.py - 修改 make_trainer 函数
 def make_trainer(model, tokenizer, emotions_encoded, config: Dict[str, Any]):
     import inspect
     from transformers import DataCollatorWithPadding
 
     train_batch_size = config.get("per_device_train_batch_size", 8)
-    eval_batch_size = config.get("per_device_eval_batch_size", 8)
+    eval_batch_size = 8
     gradient_accumulation = config.get("gradient_accumulation_steps", 1)
     logging_steps = max(1, len(emotions_encoded["train"]) // max(1, train_batch_size // gradient_accumulation) // 10)
 
@@ -118,7 +110,7 @@ def make_trainer(model, tokenizer, emotions_encoded, config: Dict[str, Any]):
 
     base_args = {
         "output_dir": config.get("output_dir", "./output"),
-        "num_train_epochs": config.get("num_train_epochs", 20),
+        "num_train_epochs": config.get("num_train_epochs", 5),
         "learning_rate": config.get("learning_rate", 1e-3),
         "per_device_train_batch_size": train_batch_size,  # 改这里
         "per_device_eval_batch_size": eval_batch_size,  # 改这里

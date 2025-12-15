@@ -5,7 +5,7 @@ from transformers import pipeline
 import torch
 
 OUT_PATH = "adversarial_results.txt"
-MODEL_DIR = "./model"
+MODEL_DIR = "./finetuned_models/emotion_distilbert_ft"
 
 adversarial_samples = [
     {

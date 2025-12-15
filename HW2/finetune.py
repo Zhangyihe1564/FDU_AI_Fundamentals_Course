@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from model import init_model_and_tokenizer, prepare_datasets, make_trainer
 
-
 class ModelFinetune:
     """模型微调和保存管理类"""
 
@@ -14,7 +13,7 @@ class ModelFinetune:
         self.tokenizer = None
         self.model = None
         self.trainer = None
-        self.output_dir = Path(config.get("output_dir", "./finetuned_models"))
+        self.output_dir = Path(config.get("output_dir", "./model"))
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def setup_model(self) -> bool:
@@ -177,11 +176,10 @@ def main():
         "cuda_device": 0,
         "fp16": True,
         "low_cpu_mem_usage": True,
-        "per_device_train_batch_size": 8, #训练批次大小
-        "per_device_eval_batch_size": 8, #评估批次大小
-        "num_train_epochs": 3, #训练轮数
-        "learning_rate": 2e-5, #学习率
-        "weight_decay": 0.01, #权重衰减
+        "per_device_train_batch_size": 16, #训练批次大小
+        "num_train_epochs": 5, #训练轮数
+        "learning_rate": 5e-5, #学习率
+        "weight_decay": 0.001, #权重衰减
         "gradient_accumulation_steps": 1, #梯度累积步数
         "evaluation_strategy": "epoch", #评估策略
         "disable_tqdm": False,
@@ -204,3 +202,19 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+'''
+RESULT1
+"per_device_train_batch_size": 16, #训练批次大小
+"num_train_epochs": 5, #训练轮数
+"learning_rate": 8e-5, #学习率
+"weight_decay": 0.001, #权重衰减
+
+'eval_loss': 0.3076220452785492, 
+'eval_accuracy': 0.936, 
+'eval_f1': 0.9359976158517335, 
+'eval_runtime': 1.5003, 
+'eval_samples_per_second': 1333.09, 
+'eval_steps_per_second': 166.636, 
+'epoch': 5.0
+'''

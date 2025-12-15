@@ -20,7 +20,7 @@ except Exception:
 
 # python
 # ==================== 手动调整超参数 ====================
-CHECKPOINT = ""  # 若为空则使用默认模型，否则填写checkpoint路径
+CHECKPOINT = r"./finetuned_models/emotion_distilbert_ft"  # 若为空则使用默认模型，否则填写checkpoint路径
 MODEL_CKPT = "distilbert-base-uncased"
 DATASET_NAME = "emotion"
 NUM_LABELS = 6
@@ -32,6 +32,14 @@ OUTPUT_DIR = "analysis_results"
 MAX_TRAIN_EXAMPLES = None
 MAX_VAL_EXAMPLES = None
 MAX_TEST_EXAMPLES = None
+LABEL_MAP = {
+    0: "sadness",
+    1: "joy",
+    2: "love",
+    3: "anger",
+    4: "fear",
+    5: "surprise"
+}
 # ========================================================
 
 
@@ -67,7 +75,6 @@ def analyze_single_run(checkpoint):
             tokenizer = AutoTokenizer.from_pretrained(checkpoint, use_fast=True)
             model = AutoModelForSequenceClassification.from_pretrained(checkpoint)
             model.to(device)
-            # 删除 model.half()，让推理自然处理精度
         else:
             tokenizer, model, _ = init_model_and_tokenizer(
                 model_ckpt=MODEL_CKPT,
@@ -77,7 +84,6 @@ def analyze_single_run(checkpoint):
                 low_cpu_mem_usage=True,
                 force_download=False
             )
-            # 删除这一行：model.to(device)，因为 init_model_and_tokenizer 已经处理了
     except Exception as e:
         return None, f"load_error: {e}"
 
@@ -104,6 +110,18 @@ def analyze_single_run(checkpoint):
     ds.set_format("pandas")
     cols = ["text", "label", "predicted_label", "loss"]
     df = ds[:][cols].copy()
+    for i in range(NUM_LABELS):
+        LABEL_MAP.setdefault(i, f"{i}")
+
+    # 强制使用手动映射，不使用自动生成的 LABEL_x 映射
+    id2label = {int(k): str(v) for k, v in LABEL_MAP.items()}
+
+    # 将数字标签映射为可读文本列（找不到的用原数字字符串）
+    df["label_name"] = df["label"].astype(int).map(id2label).fillna(df["label"].astype(int).astype(str))
+    df["predicted_label_name"] = df["predicted_label"].astype(int).map(id2label).fillna(
+        df["predicted_label"].astype(int).astype(str))
+
+    print("Using forced id2label mapping:", id2label)
 
     mean_loss = float(df["loss"].mean())
     accuracy = float((df["label"] == df["predicted_label"]).mean())

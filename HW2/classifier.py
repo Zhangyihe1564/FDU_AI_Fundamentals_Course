@@ -15,7 +15,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.tree import ExtraTreeClassifier
 
-#数据生成
+# 导入 transformers 和 datasets 组件
 from transformers import AutoTokenizer, AutoModel
 from datasets import load_dataset
 import torch
@@ -34,94 +34,75 @@ def extract_hidden_states(batch):
     return {"hidden_state": last_hidden_state[:, 0].cpu().numpy()}
 
 def compare_models(x_train, x_valid, Y_train, Y_valid, save_path=None):
-    # ==========================================
-    # 1. 定义要比较的模型字典
-    # ==========================================
+    results = []
     models = {
         "Dummy (Baseline)": DummyClassifier(strategy="most_frequent"),
-
-        # max_iter 设置大一点，因为高维数据通常收敛较慢
         "Logistic Regression": LogisticRegression(max_iter=3000, n_jobs=-1),
-
-        # 线性核 SVM 通常在文本向量上表现很好且比 RBF 核快
         "Linear SVM": SVC(kernel="linear", C=1.0),
-
-        # 随机森林：通用强力模型
         "Random Forest": RandomForestClassifier(n_estimators=100, n_jobs=-1, random_state=42),
-
-        # 梯度提升树 (类似 LightGBM/XGBoost 的 sklearn 原生实现)
         "Gradient Boosting": HistGradientBoostingClassifier(random_state=42),
-
-        # K-近邻
         "K-Nearest Neighbors": KNeighborsClassifier(n_neighbors=5),
-
-        # 决策树
         "Decision Tree": DecisionTreeClassifier(random_state=42),
-
-        # 极端随机树
         "Extra Tree": ExtraTreeClassifier(random_state=42),
-
     }
 
-    # ==========================================
-    # 2. 循环训练与评估
-    # ==========================================
-    results = []
-
     print(f"\n开始对比 {len(models)} 个模型...\n" + "=" * 40)
-
     for name, model in models.items():
-        start_time = time.time()
-
-        # 训练
+        start_ns = time.perf_counter_ns()
         model.fit(x_train, Y_train)
-
-        # 预测
         y_pred = model.predict(x_valid)
-
-        # 评估
         acc = accuracy_score(Y_valid, y_pred)
-        elapsed = time.time() - start_time
+        elapsed_s = (time.perf_counter_ns() - start_ns) / 1e9  # 秒，精度到纳秒
+        print(f"✅ {name:<20} | 准确率: {acc:.4f} | 耗时: {elapsed_s:.4f}s")
+        results.append({"Model": name, "Accuracy": acc, "Time (s)": elapsed_s})
 
-        print(f"✅ {name:<20} | 准确率: {acc:.4f} | 耗时: {elapsed:.2f}s")
-
-        results.append({
-            "Model": name,
-            "Accuracy": acc,
-            "Time (s)": elapsed
-        })
-
-    # ==========================================
-    # 3. 可视化结果
-    # ==========================================
     df_results = pd.DataFrame(results).sort_values(by="Accuracy", ascending=False)
+    names = df_results["Model"].tolist()
+    accuracies = df_results["Accuracy"].tolist()
+    times = df_results["Time (s)"].tolist()
 
-    plt.figure(figsize=(10, 6))
+    x = np.arange(len(names))
+    width = 0.35
 
-    # 绘制条形图
-    bars = plt.barh(df_results["Model"], df_results["Accuracy"], color='skyblue')
-    plt.xlabel("Accuracy Score")
-    plt.title("Classifier Comparison on Embeddings")
-    plt.xlim(0, 1.05)  # 设置x轴范围
-    plt.grid(axis='x', linestyle='--', alpha=0.7)
+    fig, ax1 = plt.subplots(figsize=(12, 6))
+    ax2 = ax1.twinx()
 
-    # 在柱子上显示具体数值
-    for bar in bars:
-        width = bar.get_width()
-        plt.text(width + 0.01, bar.get_y() + bar.get_height() / 2,
-                 f'{width:.4f}', va='center', color='black')
+    # 左轴：Accuracy 柱状（偏左）
+    bars1 = ax1.bar(x - width/2, accuracies, width, color='skyblue', label='Accuracy')
+    ax1.set_ylabel("Accuracy")
+    ax1.set_ylim(0, 1.05)
 
-        # 如果提供保存路径，则创建目录并保存（高分辨率）
+    # 右轴：Time 柱状（偏右）
+    bars2 = ax2.bar(x + width/2, times, width, color='orange', label='Time (s)')
+    ax2.set_ylabel("Time (s)")
+    max_time = max(times) if times else 1.0
+    ax2.set_ylim(0, max_time * 1.3)
+
+    # 在柱子上标注数值
+    for xi, h in zip(x - width/2, accuracies):
+        ax1.text(xi, h + 0.02, f'{h:.4f}', ha='center', va='bottom', color='black', fontsize=9)
+    for xi, t in zip(x + width/2, times):
+        ax2.text(xi, t + (max_time * 0.03), f'{t:.4f}s', ha='center', va='bottom', color='orange', fontsize=9)
+
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(names, rotation=45, ha='right')
+
+    # 合并图例
+    handles1, labels1 = ax1.get_legend_handles_labels()
+    handles2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(handles1 + handles2, labels1 + labels2, loc='upper right')
+
+    plt.title("Classifier Comparison (Accuracy & Time)")
+    plt.tight_layout()
+
     if save_path:
         dirpath = os.path.dirname(save_path)
         if dirpath:
             os.makedirs(dirpath, exist_ok=True)
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"已保存图片到: `{save_path}`")
-    plt.tight_layout()
+        print(f"已保存图片到: ` {save_path} `")
+
     plt.show()
-
-
 
 if __name__ == "__main__":
     # 设备设置
