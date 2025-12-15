@@ -14,7 +14,7 @@
 
 对于使用，你需要在两个作业文件夹下分别使用uv sync来创建环境并在ide（如vscode，pycharm）中选择对应虚拟环境的python解释器。
 
-第一个大作业(HW1)使用python 3.14，第二个大作业(HW2)使用python 3.11。
+第一个大作业(HW1)使用python 3.14，第二个大作业(HW2)使用python 3.13。
 
 你既可以将代码clone到本地运行，也可以将仓库clone到阿里云DSW实例上运行（推荐使用GPU实例）。
 相关的git使用方法请自行上网搜索。
